@@ -1,0 +1,65 @@
+# GitHub Actions CD pipeline: build a Docker image and push it to a registry,
+# then deploy. Runs only on a version tag (build once, deploy many). This is
+# "Continuous Delivery/Deployment".
+
+name: CD
+
+on:
+  push:
+    tags: ["v*"]   # e.g. v1.2.0 — release tags only
+
+# Least-privilege permissions for the GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: write   # to push to GitHub Container Registry (ghcr.io)
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Enable multi-platform builds + layer caching.
+      - uses: docker/setup-buildx-action@v3
+
+      # Authenticate to the registry using the built-in token (a secret).
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derive image tags/labels from git metadata (the tag → image version).
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/expense-api
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha
+
+      # Build the image (using our Dockerfile) and push it — ONCE.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: 02-spring-boot/expense-api
+          file: 12-docker/examples/Dockerfile.springboot
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push        # gate: only deploy if the image built/pushed
+    runs-on: ubuntu-latest
+    environment: production      # GitHub Environment — can require manual approval
+    steps:
+      - uses: actions/checkout@v4
+      # Deploy the immutable image tag to the cluster (Kubernetes track 14).
+      # In reality: `kubectl set image ...` / helm upgrade / argocd sync, using
+      # cluster credentials stored as encrypted repository secrets.
+      - name: Deploy to Kubernetes
+        run: echo "kubectl set image deployment/expense-api api=ghcr.io/${{ github.repository }}/expense-api:${{ github.ref_name }}"

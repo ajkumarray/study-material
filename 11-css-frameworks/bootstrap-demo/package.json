@@ -1,0 +1,8 @@
+{
+  "name": "bootstrap-demo",
+  "private": true,
+  "description": "Bootstrap 5 component-based demo (references installed dist CSS/JS)",
+  "dependencies": {
+    "bootstrap": "^5.3.8"
+  }
+}

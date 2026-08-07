@@ -1,0 +1,41 @@
+# Spring Boot config (Phase 1.3 / 3.3). YAML is the idiomatic format.
+# Externalized config: no values hardcoded in Java; override per environment.
+
+spring:
+  application:
+    name: expense-api
+
+  # In-memory H2. Swap these four lines for a postgres URL + driver and the
+  # rest of the app is unchanged (the driver abstraction, Java Phase 7).
+  datasource:
+    url: jdbc:h2:mem:expenses;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: update        # build schema from @Entity classes (dev only; use Flyway in prod)
+    show-sql: true            # log the SQL Hibernate generates (see it working)
+    properties:
+      hibernate.format_sql: false
+
+  h2:
+    console:
+      enabled: true           # browse the DB at /h2-console when running
+
+# Actuator (Phase 8): expose health + info endpoints.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+server:
+  port: 8080
+
+# JWT settings (Phase 7.3). In real apps the secret comes from an env var /
+# secrets manager, NEVER committed. HS256 needs a key >= 256 bits (32+ chars).
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-long-random-secret-at-least-32-bytes!!}
+    expiration-ms: 3600000     # 1 hour

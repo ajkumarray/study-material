@@ -1,0 +1,59 @@
+# Postgres as a StatefulSet. Unlike a Deployment (interchangeable, stateless Pods),
+# a StatefulSet gives Pods STABLE identities (postgres-0, postgres-1) and STABLE,
+# per-Pod persistent storage — what stateful systems (databases) need.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres          # the headless Service that gives stable network IDs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: expenses
+            - name: POSTGRES_USER
+              value: app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: expense-secrets
+                  key: SPRING_DATASOURCE_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  # volumeClaimTemplates create a PersistentVolumeClaim PER Pod — durable storage that
+  # survives Pod rescheduling/restarts (a PVC binds to a PersistentVolume).
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+# A headless Service (clusterIP: None) for stable per-Pod DNS: postgres-0.postgres...
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

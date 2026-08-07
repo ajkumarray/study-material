@@ -1,0 +1,59 @@
+# GitHub Actions CI pipeline for the Spring Boot expense-api.
+# Lives at .github/workflows/ci.yml in a real repo. Runs on every push/PR:
+# build → test → package → build image. This is "Continuous Integration".
+
+name: CI
+
+# Triggers: what causes the pipeline to run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest   # the runner (a fresh VM per run)
+
+    # A service container: a real Postgres for integration tests, torn down after.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: expenses
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: secret
+        ports: ["5432:5432"]
+        # Wait until Postgres is healthy before the job's steps run.
+        options: >-
+          --health-cmd "pg_isready -U app -d expenses"
+          --health-interval 5s --health-timeout 3s --health-retries 5
+
+    steps:
+      # 1) Check out the repository code.
+      - uses: actions/checkout@v4
+
+      # 2) Set up the JDK. `cache: maven` caches ~/.m2 across runs (fast builds).
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      # 3) Build + run the test suite (fails the pipeline on any test failure).
+      - name: Build and test
+        working-directory: 02-spring-boot/expense-api
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/expenses
+          SPRING_DATASOURCE_USERNAME: app
+          SPRING_DATASOURCE_PASSWORD: secret
+        run: mvn -B verify   # compile + unit + integration tests + package
+
+      # 4) Publish the test report as an artifact (visible on the run).
+      - name: Upload test results
+        if: always()   # even if tests failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: 02-spring-boot/expense-api/target/surefire-reports/

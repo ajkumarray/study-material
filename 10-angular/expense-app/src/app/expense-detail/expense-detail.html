@@ -1,0 +1,8 @@
+@if (expense(); as e) {
+  <h2>{{ e.description }}</h2>
+  <p>Amount: {{ e.amountCents / 100 | currency }}</p>
+  <p>Category: {{ e.category }}</p>
+} @else {
+  <p>Expense not found.</p>
+}
+<p><a routerLink="/expenses">← Back</a></p>

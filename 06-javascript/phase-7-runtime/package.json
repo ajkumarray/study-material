@@ -1,0 +1,15 @@
+{
+  "name": "js-phase-7-demo",
+  "version": "1.0.0",
+  "description": "Sample manifest for the npm lesson (7.1)",
+  "type": "module",
+  "scripts": {
+    "start": "node npm-and-fetch.mjs",
+    "demo": "node npm-and-fetch.mjs"
+  },
+  "keywords": ["learning", "javascript"],
+  "author": "Ajay",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

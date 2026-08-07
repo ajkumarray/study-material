@@ -1,0 +1,34 @@
+# A Service gives a stable virtual IP + DNS name for a set of Pods (which come and go).
+# It load-balances across all Pods matching its selector. Type ClusterIP = internal-only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: expense-api          # in-cluster DNS: expense-api.<namespace>.svc.cluster.local
+spec:
+  type: ClusterIP            # ClusterIP (internal) | NodePort | LoadBalancer
+  selector:
+    app: expense-api         # routes to Pods with this label (decoupled from Deployment)
+  ports:
+    - port: 80               # the Service port
+      targetPort: 8080       # the container port
+---
+# An Ingress exposes HTTP routes from outside the cluster to Services (one entry point,
+# host/path routing, TLS). Needs an ingress controller (nginx, Traefik) installed.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: expense-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: expenses.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: expense-api
+                port:
+                  number: 80

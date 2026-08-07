@@ -1,0 +1,25 @@
+# Spring Kafka config for the expense-api producing & consuming events.
+# (Pairs with the spring-kafka dependency.)
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}   # broker list (cluster entry point)
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all              # wait for all in-sync replicas → strongest durability
+      retries: 3             # retry transient send failures
+      properties:
+        enable.idempotence: true   # no duplicate records on producer retries (exactly-once send)
+
+    consumer:
+      group-id: expense-analytics  # consumers sharing this id form a CONSUMER GROUP
+      auto-offset-reset: earliest  # on first run / no committed offset, read from start
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      enable-auto-commit: false    # commit offsets manually after successful processing
+      properties:
+        spring.json.trusted.packages: "com.example.expense.events"
+
+    listener:
+      ack-mode: manual       # we ack explicitly once a record is handled (at-least-once)

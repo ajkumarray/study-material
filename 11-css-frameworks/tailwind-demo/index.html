@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tailwind Demo — Expenses</title>
+  <!-- The compiled utility stylesheet (produced by `npm run build`). -->
+  <link rel="stylesheet" href="./dist/output.css" />
+</head>
+<!-- Utility-first: styling lives in the markup as small composable classes. -->
+<body class="bg-slate-100 text-slate-800 min-h-screen p-6">
+  <main class="max-w-md mx-auto">
+    <header class="flex items-center justify-between mb-4">
+      <h1 class="text-2xl font-bold tracking-tight">Expenses</h1>
+      <span class="rounded-full bg-emerald-100 text-emerald-700 text-sm font-medium px-3 py-1">
+        Total $1,042.50
+      </span>
+    </header>
+
+    <ul class="space-y-3">
+      <!-- A reusable "card" is just a bundle of utilities (extract to a component in React/Angular). -->
+      <li class="flex items-center justify-between bg-white rounded-lg shadow-sm ring-1 ring-slate-200 p-4 hover:shadow-md transition-shadow">
+        <div>
+          <p class="font-medium">Lunch</p>
+          <p class="text-sm text-slate-500">food</p>
+        </div>
+        <p class="font-semibold text-slate-900">$12.50</p>
+      </li>
+      <li class="flex items-center justify-between bg-white rounded-lg shadow-sm ring-1 ring-slate-200 p-4 hover:shadow-md transition-shadow">
+        <div>
+          <p class="font-medium">Bus pass</p>
+          <p class="text-sm text-slate-500">transport</p>
+        </div>
+        <p class="font-semibold text-slate-900">$30.00</p>
+      </li>
+      <li class="flex items-center justify-between bg-white rounded-lg shadow-sm ring-1 ring-slate-200 p-4 hover:shadow-md transition-shadow">
+        <div>
+          <p class="font-medium">Rent</p>
+          <p class="text-sm text-slate-500">housing</p>
+        </div>
+        <p class="font-semibold text-slate-900">$900.00</p>
+      </li>
+    </ul>
+
+    <!-- Responsive: `sm:` prefix applies only at ≥640px (mobile-first). -->
+    <button class="mt-6 w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+      + Add expense
+    </button>
+  </main>
+</body>
+</html>

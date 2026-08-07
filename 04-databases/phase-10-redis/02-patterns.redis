@@ -1,0 +1,69 @@
+# ============================================================================
+# Lesson 10.3/10.4/10.5 — Redis: caching, pub/sub, transactions, persistence
+# Run in redis-cli.
+# ============================================================================
+
+# ---- CACHING (Redis's #1 use — System Design Phase 2) ----
+# CACHE-ASIDE pattern (app-side logic, shown as pseudocode):
+#   value = GET book:1
+#   if value is null:                # cache MISS
+#       value = <query Postgres>
+#       SET book:1 <value> EX 300    # populate with a 5-min TTL
+#   return value
+# The TTL bounds staleness; on the next miss it reloads. Cache invalidation on
+# write:  DEL book:1  (or SET the new value) when the source row changes.
+
+SET book:1 '{"title":"Clean Code","price":41}' EX 300   # cached JSON with TTL
+GET book:1
+
+# ---- EVICTION — Redis is memory-bounded (Phase 7 / System Design 7). Configure
+# a maxmemory + policy so it evicts instead of OOMing:
+#   CONFIG SET maxmemory 256mb
+#   CONFIG SET maxmemory-policy allkeys-lru   # evict least-recently-used keys
+# Policies: noeviction (reject writes), allkeys-lru/lfu, volatile-ttl (evict soonest-expiring).
+# "A cache without eviction is a memory leak" — Redis makes eviction a config.
+
+# ---- ATOMIC OPERATIONS & rate limiting ----
+# Single commands are atomic. A fixed-window rate limiter in 2 commands:
+#   INCR rate:user:42            # count this request
+#   EXPIRE rate:user:42 60       # window resets after 60s (set on first hit)
+#   -> if the value exceeds the limit, reject (429). (Token bucket, System Design 5.)
+
+# ---- TRANSACTIONS (MULTI/EXEC) — queue commands, run atomically ----
+MULTI                          # start a transaction
+  INCR pageviews
+  SET last_view "now"
+EXEC                           # run both atomically (no other client interleaves)
+# WATCH key -> optimistic locking: abort EXEC if the watched key changed (CAS).
+# For complex atomic logic, LUA SCRIPTS (EVAL) run server-side atomically —
+# the correct way to do multi-step rate limiting / conditional updates.
+
+# ---- PUB/SUB (fire-and-forget messaging; System Design Phase 9) ----
+# Subscriber:   SUBSCRIBE news
+# Publisher:    PUBLISH news "hello"    -> all current subscribers get it
+# No persistence/replay (unlike Streams/Kafka) — use for live notifications,
+# chat fan-out, cache-invalidation broadcasts.
+
+# ---- PIPELINING (throughput) ----
+# Send many commands without waiting for each reply (cuts network round-trips).
+# In redis-cli you'd batch; in code, use the client's pipeline API.
+
+# ---- PERSISTENCE (Redis can survive restarts despite being in-memory) ----
+# RDB : point-in-time SNAPSHOTS to disk (compact, fast restart, some data loss window).
+# AOF : append-only log of every write (durable, replayed on restart, larger).
+# Use RDB for backups, AOF for durability, or both. Pure cache? Persistence off.
+#   CONFIG SET save "900 1"      # RDB snapshot if >=1 change in 900s
+#   CONFIG SET appendonly yes    # enable AOF
+
+# ---- CLUSTERING / HA ----
+# Redis Sentinel = automatic failover for a primary-replica setup.
+# Redis Cluster = sharding across nodes (hash slots) for horizontal scale.
+
+# ----------------------------------------------------------------------------
+# Redis + Spring (Spring Boot Phase 8 / track 15): spring-boot-starter-data-redis
+# + @Cacheable makes Redis the cache behind your service with almost no code.
+# Redis is single-threaded for commands (so each command is atomic) yet blazing
+# fast because everything is in RAM. Use it for cache, sessions, counters,
+# leaderboards, rate limiting, queues, and pub/sub — NOT as your primary
+# system-of-record for critical data (it's memory-first).
+# ----------------------------------------------------------------------------

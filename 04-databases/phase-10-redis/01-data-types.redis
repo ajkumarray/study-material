@@ -1,0 +1,68 @@
+# ============================================================================
+# Lesson 10.1/10.2 — Redis: keys, TTL, and the data-type toolkit
+# Run in redis-cli. Redis is an IN-MEMORY data-structure store: everything lives
+# in RAM (with optional persistence), so ops are microsecond-fast. It's not just
+# key->string — the VALUE can be a rich data structure.
+# ============================================================================
+
+# ---- STRINGS (the simplest value: text, numbers, JSON blobs, counters) ----
+SET user:1:name "Ajay"
+GET user:1:name
+SET pageviews 0
+INCR pageviews                 # atomic increment -> 1  (great for counters)
+INCRBY pageviews 10            # -> 11
+APPEND user:1:name " Kumar"
+
+# ---- KEYS & TTL (expiry) — the heart of Redis-as-a-cache ----
+SET session:abc "user-42"
+EXPIRE session:abc 3600        # auto-delete after 3600s (TTL) -> perfect for sessions
+TTL session:abc               # seconds remaining (-1 = no expiry, -2 = gone)
+SET otp:9876 "123456" EX 300  # set + expire in one command (5-min OTP)
+PERSIST session:abc           # remove the TTL (keep forever)
+DEL user:1:name               # delete a key
+EXISTS session:abc            # 1 or 0
+
+# Key naming convention: colon-separated namespaces  entity:id:field
+#   user:1:name   session:abc   cart:42:items   -> readable, groupable
+
+# ---- HASHES (a map of field->value: model an object compactly) ----
+HSET user:2 name "Meera" city "Mumbai" age 25
+HGET user:2 name
+HGETALL user:2                 # all fields
+HINCRBY user:2 age 1           # atomic field increment
+# Use a hash instead of many string keys for one object (less memory, atomic ops).
+
+# ---- LISTS (ordered, duplicates allowed; a queue or stack) ----
+RPUSH queue:jobs "job-1" "job-2"   # push to the tail (right)
+LPUSH queue:jobs "job-0"           # push to the head (left)
+LRANGE queue:jobs 0 -1             # all elements
+LPOP queue:jobs                    # pop from head -> FIFO queue when paired with RPUSH
+# BLPOP queue:jobs 5               # BLOCKING pop -> a simple work queue (waits up to 5s)
+
+# ---- SETS (unique, unordered; membership + set algebra) ----
+SADD tags:book:1 "oop" "clean-code" "oop"   # dupes ignored -> {oop, clean-code}
+SISMEMBER tags:book:1 "oop"                 # 1
+SADD online:users "u1" "u2"
+SADD premium:users "u2" "u3"
+SINTER online:users premium:users           # intersection -> {u2}  (online AND premium)
+SCARD tags:book:1                           # size
+
+# ---- SORTED SETS (unique members, each with a SCORE; auto-ordered) ----
+# THE killer type: leaderboards, priority queues, rate limiting, time-ordered data.
+ZADD leaderboard 100 "ajay" 250 "meera" 175 "ravi"
+ZREVRANGE leaderboard 0 2 WITHSCORES        # top 3 by score (desc)
+ZRANK leaderboard "ajay"                    # a player's rank
+ZINCRBY leaderboard 50 "ajay"               # add to a score
+ZRANGEBYSCORE leaderboard 150 300           # score range query
+
+# ---- STREAMS (append-only log; Kafka-lite for event/message pipelines) ----
+XADD events * type "login" user "u1"        # * = auto id (timestamp-seq)
+XLEN events
+# XREAD / consumer groups enable reliable event processing (like Kafka, track 16).
+
+# ----------------------------------------------------------------------------
+# Pick the type by the access pattern:
+#   counter/flag/blob -> STRING ;  object -> HASH ;  queue/stack -> LIST ;
+#   membership/dedupe -> SET ;  leaderboard/ranking/priority -> SORTED SET ;
+#   event log -> STREAM.  Choosing the right structure is the whole skill.
+# ----------------------------------------------------------------------------

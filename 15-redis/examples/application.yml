@@ -1,0 +1,29 @@
+# Spring Boot config wiring Redis into the expense-api as a cache + session store.
+# (Illustrative — pairs with spring-boot-starter-data-redis + starter-cache.)
+
+spring:
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}   # "redis" service name in Docker/K8s
+      port: 6379
+      timeout: 2s
+      lettuce:                 # Lettuce is the default (async, Netty-based) client
+        pool:
+          max-active: 16       # connection pool sizing
+          max-idle: 8
+          min-idle: 2
+
+  # Spring Cache abstraction backed by Redis (enables @Cacheable/@CacheEvict).
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000     # default TTL = 10 min (ms) — every cache entry expires
+      cache-null-values: false # don't cache nulls (avoid caching "not found" forever)
+      key-prefix: "expense:"
+      use-key-prefix: true
+
+  # Spring Session stored in Redis — HTTP sessions shared across all app instances
+  # (so any replica can serve any user's session; enables horizontal scaling).
+  session:
+    store-type: redis
+    timeout: 30m

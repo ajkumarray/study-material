@@ -1,0 +1,21 @@
+# A ConfigMap holds NON-secret config as key/value pairs, injected as env vars (envFrom).
+# Change config without rebuilding the image (12-factor).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: expense-config
+data:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/expenses
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_PROFILES_ACTIVE: prod
+---
+# A Secret holds sensitive values (base64-encoded, not encrypted at rest by default —
+# enable encryption + RBAC, or use an external secrets manager). Same envFrom injection.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: expense-secrets
+type: Opaque
+stringData:                 # stringData lets you write plaintext; K8s encodes it
+  SPRING_DATASOURCE_USERNAME: app
+  SPRING_DATASOURCE_PASSWORD: secret

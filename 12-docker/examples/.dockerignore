@@ -1,0 +1,13 @@
+# Exclude everything that shouldn't enter the build context (faster builds,
+# smaller images, no leaked secrets).
+node_modules
+.next
+dist
+target
+.git
+.env
+.env.*
+*.log
+Dockerfile*
+docker-compose*.yml
+README.md

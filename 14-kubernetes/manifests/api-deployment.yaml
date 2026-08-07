@@ -1,0 +1,56 @@
+# Deployment for the Spring Boot expense-api. A Deployment manages a ReplicaSet,
+# which keeps N identical Pods running and handles rolling updates & self-healing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: expense-api
+  labels:
+    app: expense-api
+spec:
+  replicas: 3                     # desired number of Pods (K8s keeps exactly this many)
+  strategy:
+    type: RollingUpdate          # replace Pods gradually — zero downtime
+    rollingUpdate:
+      maxUnavailable: 1          # at most 1 Pod down during a rollout
+      maxSurge: 1                # at most 1 extra Pod above replicas during a rollout
+  selector:
+    matchLabels:
+      app: expense-api           # which Pods this Deployment owns (must match template labels)
+  template:                      # the Pod template — the blueprint for each replica
+    metadata:
+      labels:
+        app: expense-api         # Pods get this label; the Service selects on it
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/example/expense-api:1.0.0   # immutable tag from CI/CD (13)
+          ports:
+            - containerPort: 8080
+          # Config from a ConfigMap; secrets from a Secret (see config.yaml).
+          envFrom:
+            - configMapRef:
+                name: expense-config
+            - secretRef:
+                name: expense-secrets
+          # Resource requests (for scheduling) and limits (hard caps) — cgroups.
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          # Liveness: restart the container if this fails (deadlock/wedged).
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          # Readiness: only send traffic when this passes (warming up / dependency down).
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5

@@ -1,0 +1,28 @@
+# Multi-stage build for the Next.js app (09-nextjs/app-demo) using `output: "standalone"`.
+
+# ---- deps: install node_modules (cached on lockfile changes) ----
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# ---- build: compile the production bundle ----
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# next.config with `output: "standalone"` emits a minimal self-contained server.
+RUN npm run build
+
+# ---- runtime: only the standalone server + static assets ----
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+USER nextjs
+# The standalone output bundles a minimal node_modules; copy it + static/public.
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+EXPOSE 3000
+CMD ["node", "server.js"]

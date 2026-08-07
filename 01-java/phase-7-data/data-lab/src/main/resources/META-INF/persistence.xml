@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  persistence.xml — JPA's config file. Spring Boot GENERATES this for you
+  from application.properties (track 02); seeing it once demystifies the magic.
+-->
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence
+                 https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+
+  <persistence-unit name="datalab-pu">
+    <class>dev.ajay.data.orm.Account</class>
+
+    <properties>
+      <property name="jakarta.persistence.jdbc.url"
+                value="jdbc:h2:mem:ormlab;DB_CLOSE_DELAY=-1"/>
+      <property name="jakarta.persistence.jdbc.user" value="sa"/>
+      <property name="jakarta.persistence.jdbc.password" value=""/>
+
+      <!-- create-drop: Hibernate builds the schema from the entities at
+           startup and drops it at shutdown. Great for demos/tests;
+           NEVER in production (use Flyway/Liquibase migrations there). -->
+      <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
+      <property name="hibernate.show_sql" value="true"/>
+      <property name="hibernate.format_sql" value="false"/>
+    </properties>
+  </persistence-unit>
+</persistence>

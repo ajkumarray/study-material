@@ -1,0 +1,18 @@
+<h2>All expenses</h2>
+
+<!-- New built-in control flow (@for/@if) replaces *ngFor/*ngIf. -->
+@if (expenses().length > 0) {
+  <ul>
+    @for (e of expenses(); track e.id) {
+      <li>
+        <a [routerLink]="['/expenses', e.id]">{{ e.description }}</a>
+        — {{ e.amountCents / 100 | currency }} <em>({{ e.category }})</em>
+      </li>
+    }
+  </ul>
+  <p><strong>Total: {{ totalCents() / 100 | currency }}</strong></p>
+} @else {
+  <p>No expenses yet.</p>
+}
+
+<app-add-expense />

@@ -1,0 +1,58 @@
+# docker-compose: the full expense-tracker stack as one command (`docker compose up`).
+# Ties together the whole repo — the Spring API, its Postgres DB, and a Redis cache —
+# on a private network, with health-gated startup order.
+
+services:
+  # --- PostgreSQL (the Databases track's engine) ---
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: expenses
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret   # in real life: a secret/vault, never in the file
+    ports:
+      - "5432:5432"
+    volumes:
+      # A named volume PERSISTS data across container restarts/recreations.
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d expenses"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Redis (the Redis track's cache/session store) ---
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- The Spring Boot API (built from our Dockerfile) ---
+  api:
+    build:
+      context: ../../02-spring-boot/expense-api
+      dockerfile: ../../12-docker/examples/Dockerfile.springboot
+    environment:
+      # Service NAMES are DNS hostnames on the compose network — "db"/"redis" resolve.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/expenses
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: secret
+      SPRING_DATA_REDIS_HOST: redis
+    ports:
+      - "8080:8080"
+    depends_on:
+      # Wait for deps to be HEALTHY (not merely started) before booting the API.
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+# Named volumes are declared here and managed by Docker.
+volumes:
+  db-data:

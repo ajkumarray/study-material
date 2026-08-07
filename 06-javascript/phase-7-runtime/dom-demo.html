@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<!--
+  Phase 7.2 — The DOM & events (browser-only)
+  Open this file in a browser, then open DevTools (F12) -> Console.
+  This is your FIRST browser JavaScript: no Node, no import — a <script>
+  running against a live page. Everything here is the foundation React
+  will later abstract away (React builds/updates the DOM for you).
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>JS Phase 7.2 — DOM & Events</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; }
+    button { padding: .5rem 1rem; margin-right: .5rem; cursor: pointer; }
+    #list li { padding: .25rem 0; }
+    .done { text-decoration: line-through; opacity: .6; }
+  </style>
+</head>
+<body>
+  <h1>Mini Todo — raw DOM</h1>
+
+  <input id="task" placeholder="a task..." />
+  <button id="add">Add</button>
+  <button id="clear">Clear done</button>
+
+  <ul id="list"></ul>
+  <p id="count"></p>
+
+  <script>
+    // 1. SELECTING elements — the DOM is a tree of nodes; querySelector
+    //    finds one, querySelectorAll finds many (CSS selectors).
+    const input = document.querySelector("#task");
+    const list = document.querySelector("#list");
+    const count = document.querySelector("#count");
+
+    let todos = [];   // our state (React will manage this for us later)
+
+    // 2. RENDERING — build DOM from state. (Note how manual this is:
+    //    clear, rebuild, re-attach. React exists to eliminate exactly this.)
+    function render() {
+      list.innerHTML = "";                      // wipe
+      for (const todo of todos) {
+        const li = document.createElement("li");
+        li.textContent = todo.text;
+        if (todo.done) li.classList.add("done");
+        // 3. EVENTS — respond to user actions with addEventListener:
+        li.addEventListener("click", () => {
+          todo.done = !todo.done;               // mutate state
+          render();                             // re-render (the manual React loop)
+        });
+        list.appendChild(li);
+      }
+      const remaining = todos.filter((t) => !t.done).length;
+      count.textContent = `${remaining} of ${todos.length} remaining`;
+    }
+
+    // 4. WIRING UP — event listeners on the buttons:
+    document.querySelector("#add").addEventListener("click", () => {
+      const text = input.value.trim();
+      if (!text) return;
+      todos.push({ text, done: false });
+      input.value = "";
+      render();
+    });
+
+    document.querySelector("#clear").addEventListener("click", () => {
+      todos = todos.filter((t) => !t.done);     // immutable-style update
+      render();
+    });
+
+    // Enter key also adds (keyboard events):
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.querySelector("#add").click();
+    });
+
+    console.log("[DOM demo] loaded. Click a task to toggle it done.");
+    render();
+
+    // TAKEAWAYS (why React exists):
+    //  - You manually select, create, update, and destroy DOM nodes.
+    //  - State and UI can drift out of sync; you must re-render by hand.
+    //  - Event wiring is imperative and scattered.
+    //  React's model: describe the UI as a function of state; it diffs and
+    //  updates the real DOM for you. Track 06 builds exactly this todo in React.
+  </script>
+</body>
+</html>

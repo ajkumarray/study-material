@@ -1,0 +1,14 @@
+/* Minimal styling — kept small; the focus is React, not CSS (that's track 11). */
+body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+.app h1 { font-size: 1.5rem; }
+.expense-form { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.expense-form input, .expense-form select, .expense-form button { padding: .4rem .6rem; }
+.summary { background: #f4f4f5; padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+.summary ul { margin: .5rem 0 0; padding-left: 1.2rem; }
+.expense-list { list-style: none; padding: 0; }
+.expense-item { display: grid; grid-template-columns: 6rem 1fr 6rem 5rem 2rem; gap: .5rem;
+  align-items: center; padding: .4rem 0; border-bottom: 1px solid #eee; }
+.expense-item .amount { text-align: right; font-variant-numeric: tabular-nums; }
+.expense-item button { border: none; background: none; cursor: pointer; color: #b00; }
+.error { color: #b00; }
+.empty { color: #666; }

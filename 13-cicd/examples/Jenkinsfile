@@ -1,0 +1,71 @@
+// Jenkins declarative pipeline (pipeline-as-code, committed to the repo root as
+// `Jenkinsfile`). Same build → test → image → deploy flow as the GitHub Actions
+// example, in Jenkins' syntax — so you can speak to both tools.
+
+pipeline {
+  // Where stages run. A docker agent gives every build a clean, reproducible toolchain.
+  agent {
+    docker { image 'maven:3.9-eclipse-temurin-21' ; args '-v $HOME/.m2:/root/.m2' }
+  }
+
+  options {
+    timeout(time: 30, unit: 'MINUTES')   // don't let a hung build run forever
+    disableConcurrentBuilds()            // one build of this branch at a time
+  }
+
+  environment {
+    // Credentials pulled from Jenkins' credential store (never hardcoded).
+    REGISTRY = 'ghcr.io'
+    IMAGE    = "ghcr.io/example/expense-api"
+    REGISTRY_CREDS = credentials('ghcr-token')
+  }
+
+  stages {
+    stage('Build') {
+      steps {
+        dir('02-spring-boot/expense-api') {
+          sh 'mvn -B -DskipTests clean package'
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir('02-spring-boot/expense-api') {
+          sh 'mvn -B test'
+        }
+      }
+      post {
+        // Publish JUnit results whatever the outcome; failing tests fail the build.
+        always { junit '02-spring-boot/expense-api/target/surefire-reports/*.xml' }
+      }
+    }
+
+    stage('Build image') {
+      // Only build/publish an image on the main branch (feature branches just test).
+      when { branch 'main' }
+      steps {
+        sh """
+          echo \$REGISTRY_CREDS_PSW | docker login \$REGISTRY -u \$REGISTRY_CREDS_USR --password-stdin
+          docker build -f 12-docker/examples/Dockerfile.springboot \
+            -t \$IMAGE:${env.BUILD_NUMBER} ./02-spring-boot/expense-api
+          docker push \$IMAGE:${env.BUILD_NUMBER}
+        """
+      }
+    }
+
+    stage('Deploy to production') {
+      when { branch 'main' }
+      steps {
+        // A manual approval gate before touching production (change control).
+        input message: 'Deploy to production?', ok: 'Deploy'
+        sh "kubectl set image deployment/expense-api api=\$IMAGE:${env.BUILD_NUMBER}"
+      }
+    }
+  }
+
+  post {
+    failure { echo 'Pipeline failed — notify the team (Slack/email).' }
+    success { echo 'Pipeline succeeded.' }
+  }
+}

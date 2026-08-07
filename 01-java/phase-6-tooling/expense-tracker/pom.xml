@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lesson 6.1 — THE POM (Project Object Model): Maven's one config file.
+
+  Maven is CONVENTION over configuration:
+    src/main/java      production code
+    src/test/java      tests (compiled separately, never shipped)
+    src/main/resources config files bundled into the artifact
+    target/            all build output (never commit it)
+
+  Because every Maven project looks alike, any Java developer can open
+  this project and immediately know where everything is.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- GAV COORDINATES — this project's unique address in the universe:
+       groupId    = reverse-domain namespace (who)
+       artifactId = the project's name        (what)
+       version    = -SNAPSHOT means "still in development"           -->
+  <groupId>dev.ajay</groupId>
+  <artifactId>expense-tracker</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <!-- release replaces old source/target pairs: compile FOR Java 21 -->
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <junit.version>5.10.2</junit.version>
+  </properties>
+
+  <!-- DEPENDENCIES: declared by GAV, fetched from Maven Central into
+       ~/.m2/repository (shared cache), TRANSITIVELY (their deps too). -->
+  <dependencies>
+
+    <!-- SLF4J: the logging FACADE our code compiles against... -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>2.0.13</version>
+    </dependency>
+    <!-- ...and a concrete BACKEND chosen at deploy time (here: simple
+         stderr printer; real apps use logback). Code never sees it. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.13</version>
+      <scope>runtime</scope>   <!-- needed to RUN, invisible to compile -->
+    </dependency>
+
+    <!-- SCOPE test = tests only; never packaged, never leaks to users -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>3.25.3</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- PIN plugin versions — Maven's bundled defaults can be ancient.
+           (Real story: without this, Maven 3.8 uses compiler-plugin 3.1,
+           which ignores `release` and targets Java 5. Build breaks.) -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <!-- Surefire runs tests during the `test` phase; 3.x speaks JUnit 5 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>

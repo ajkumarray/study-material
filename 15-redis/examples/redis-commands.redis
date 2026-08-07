@@ -1,0 +1,40 @@
+# Redis CLI cheat-sheet for the MIDDLEWARE patterns in this track.
+# (Data-structure depth — strings/hashes/sets/sorted-sets/streams — is in the
+#  Databases track, 04-databases. Here we focus on caching/session/lock/rate-limit.)
+# Run against a live server with: redis-cli
+
+# --- Caching: value + TTL (the heart of cache-aside) ---
+SET expense:1 '{"id":1,"desc":"Lunch","cents":1250}' EX 600   # cache for 600s (10m)
+GET expense:1
+TTL expense:1            # seconds left before expiry (-1 = no expiry, -2 = missing)
+EXPIRE expense:1 300     # reset TTL to 5m
+DEL expense:1            # invalidate on update/delete
+
+# --- Atomic counters: rate limiting & metrics ---
+INCR rate:user42         # atomic increment (returns new value); no race conditions
+EXPIRE rate:user42 60    # fixed 60s window
+INCRBY views:page1 5
+
+# --- SET options: locks & "set if absent" ---
+SET lock:order99 owner-abc NX EX 30   # acquire lock only if key absent, auto-expire 30s
+SET lock:order99 owner-xyz NX EX 30   # returns nil — already held (NX = not exists)
+
+# --- Hashes: session fields / partial objects ---
+HSET session:tok123 userId 42 role admin
+HGETALL session:tok123
+EXPIRE session:tok123 1800            # 30m session timeout
+
+# --- Sorted sets: leaderboards / sliding-window rate limiting ---
+ZADD leaderboard 100 alice 250 bob
+ZREVRANGE leaderboard 0 2 WITHSCORES  # top 3
+
+# --- Pub/Sub: fire-and-forget messaging (see also Kafka track 16 for durable) ---
+# terminal A:  SUBSCRIBE expense-events
+# terminal B:  PUBLISH expense-events '{"type":"created","id":1}'
+
+# --- Ops / introspection ---
+KEYS expense:*           # DEV ONLY — O(N), blocks; use SCAN in production
+SCAN 0 MATCH expense:* COUNT 100
+INFO memory              # memory usage
+DBSIZE                   # number of keys
+FLUSHDB                  # wipe current DB (careful!)

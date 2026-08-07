@@ -1,0 +1,20 @@
+# HorizontalPodAutoscaler scales the Deployment's replica count automatically based on
+# observed metrics (CPU here) — add Pods under load, remove them when idle.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: expense-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: expense-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # keep avg CPU ~70%; scale out above, in below
