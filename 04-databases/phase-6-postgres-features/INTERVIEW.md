@@ -7,32 +7,157 @@
 
 ⭐ = asked constantly.
 
-**Q: View vs materialized view?** ⭐⭐
-A view is a saved query, re-run on each access — always fresh, no storage. A materialized view stores the query result on disk — fast reads but stale until `REFRESH`. Use a view to simplify/secure queries; a materialized view to cache expensive aggregates that tolerate staleness.
+**Q: View vs materialized view — what's the difference, and when would you use
+each?** ⭐⭐
+A view is a saved query with no storage of its own — every `SELECT` against it
+re-runs the underlying query, so it's always perfectly current, at the cost of
+paying that query's full cost on every single read. A materialized view stores the
+query's *result* physically on disk — reads are fast because there's nothing left
+to compute, but the data is frozen as of the last `REFRESH MATERIALIZED VIEW` and
+goes stale as soon as the underlying tables change. Use a plain view to encapsulate
+a complex join/aggregation behind a simple, stable name, or to expose a restricted
+subset of a table for security. Use a materialized view for an expensive
+aggregate/report that's read often, written rarely, and can tolerate being a few
+minutes (or hours) out of date — a dashboard summary, for instance, rather than a
+live account balance.
 
-**Q: Why use a view?**
-Encapsulate complex joins/logic behind a simple name, provide a stable interface as tables change, and enforce security (grant access to a view exposing only some columns/rows instead of the base tables).
+**Q: Why use a view at all, if it doesn't actually improve performance over the raw
+query?**
+Two reasons that have nothing to do with performance. First, encapsulation: a view
+hides a complex multi-table join/aggregate behind a simple name, so callers write
+`SELECT * FROM author_revenue` instead of repeating (and risking subtly diverging
+copies of) a five-line join everywhere it's needed — and if the underlying schema
+changes, you can often update just the view's definition rather than every caller.
+Second, security: you can `GRANT` a role access to a view that exposes only certain
+columns or rows of a sensitive base table, without ever granting direct access to
+the base table itself.
 
-**Q: Function vs stored procedure in Postgres?**
-A function returns a value and runs within the caller's transaction (can't COMMIT). A procedure is `CALL`ed, returns nothing, and can manage transactions (COMMIT/ROLLBACK). Functions for computed values/queries; procedures for multi-step operations needing transaction control.
+**Q: How do you refresh a materialized view without blocking readers?**
+Plain `REFRESH MATERIALIZED VIEW name` takes an exclusive lock for the duration of
+the recompute, so any query trying to read the view blocks until the refresh
+finishes. `REFRESH MATERIALIZED VIEW CONCURRENTLY name` avoids that — it computes
+the new result set in the background and atomically swaps it in, so concurrent
+readers keep seeing the old (slightly stale) snapshot right up until the swap.
+`CONCURRENTLY` has one prerequisite: the materialized view needs a `UNIQUE` index
+(`CREATE UNIQUE INDEX ON name (id)`), which Postgres uses to match up old and new
+rows during the swap.
 
-**Q: What is a trigger and when would you use one?** ⭐
-A function fired automatically on INSERT/UPDATE/DELETE (BEFORE/AFTER, per row/statement), with NEW/OLD references. Uses: audit logging, maintaining derived/denormalized columns, and integrity rules too complex for constraints. Avoid putting core business logic in triggers (hard to test/trace).
+**Q: Function vs stored procedure in Postgres — what's the actual difference?**
+A **function** returns a value (a scalar, or a whole result set via `RETURNS
+TABLE`) and always executes inside the *caller's* transaction — it cannot issue its
+own `COMMIT` or `ROLLBACK`. A **procedure** is invoked with `CALL` rather than
+`SELECT`, returns nothing, and — unlike a function — **can** manage its own
+transaction boundaries internally. Functions fit reusable calculations and
+parameterized queries; procedures fit multi-step operational tasks that genuinely
+need transaction control of their own, like a batch job that commits progress after
+each chunk rather than holding one giant transaction open for the whole run.
 
-**Q: Should business logic live in the database or the application?** *judgment*
-Data-integrity, auditing, and rules that must hold regardless of the writer belong in the DB (constraints, triggers). Business logic belongs in the app (testable, versioned, easier to debug). Overusing stored procedures creates hidden, hard-to-maintain logic; underusing constraints lets bad data in. Balance.
+**Q: What is a trigger, and when would you reach for one?** ⭐
+A trigger is a function that fires automatically whenever a specified data-changing
+event (`INSERT`/`UPDATE`/`DELETE`) happens on a table — declared to run `BEFORE` or
+`AFTER` that event, and either `FOR EACH ROW` or `FOR EACH STATEMENT`. Inside a
+row-level trigger function, `NEW` refers to the row's state after the change and
+`OLD` to its state before (an `INSERT` trigger only has `NEW`, a `DELETE` trigger
+only has `OLD`). Typical uses: audit logging (write an old/new value pair to a
+history table whenever a sensitive column changes), keeping a derived or
+denormalized column in sync automatically, and enforcing integrity rules too
+dynamic to express as a static `CHECK` constraint.
+```sql
+CREATE TRIGGER trg_price_audit
+    BEFORE UPDATE ON book
+    FOR EACH ROW
+    EXECUTE FUNCTION log_price_change();
+```
+For a `BEFORE` trigger, the row the trigger function `RETURN`s is what actually
+gets written — this is also how a `BEFORE` trigger can veto or modify a write
+before it happens, not just react to it afterward.
 
-**Q: What is JSONB and when do you use it?** ⭐⭐
-A binary JSON column type — schemaless, nested, queryable (`->`, `->>`, `@>`) and indexable (GIN). Use for semi-structured or variable attributes without a rigid schema — document-database flexibility inside Postgres. Trade-off: less integrity/typing than real columns, so use it for genuinely variable data, not to avoid modeling.
+**Q: Should business logic live in the database (functions/triggers) or in the
+application layer?** *judgment question*
+Data-integrity rules, audit trails, and invariants that must hold no matter which
+of possibly many applications or scripts touches the table belong in the database —
+that's exactly the same reasoning behind putting constraints (Phase 3) in the
+database rather than only in application code. Core, evolving *business* logic
+belongs in the application layer, where it's unit-testable, versionable alongside
+the rest of the codebase, and far easier to step through in a debugger than
+PL/pgSQL running inside the database. Overusing triggers/stored procedures for
+business logic creates hidden, hard-to-trace behavior (an engineer reading the
+application code has no way to know an `UPDATE` also silently cascades into three
+other tables via triggers); underusing database-level integrity enforcement leaves
+bad data reachable by any writer that skips the application's validation path. The
+practical line: database code for integrity/audit concerns that must hold
+regardless of the writer; application code for everything that's actually business
+logic.
 
-**Q: JSONB vs a separate document database (MongoDB)?**
-JSONB gives document flexibility while keeping ACID transactions, joins, and one system to operate. A dedicated document DB wins for very large scale, sharding, or when the whole model is document-shaped. Many teams start with Postgres JSONB and move only if needed.
+**Q: What is JSONB, and when would you use it?** ⭐⭐
+`JSONB` is Postgres's binary-encoded JSON column type — schemaless, arbitrarily
+nested, and unlike plain `JSON`, both queryable (`->`, `->>`, `@>`, path operators)
+and indexable (a GIN index accelerates `@>` containment lookups). Use it for
+attributes that are genuinely semi-structured or vary per row — product
+specifications that differ wildly by product category, a flexible "settings"
+column, third-party webhook payloads you need to store as-received. The trade-off
+is real: `JSONB` fields carry none of the type-checking, `NOT NULL`, or foreign-key
+integrity that real columns get, so it should be a deliberate choice for genuinely
+variable data, not a way to avoid modeling a schema you actually understand.
+```sql
+SELECT name FROM product WHERE attrs @> '{"wireless": true}';   -- containment, GIN-indexable
+UPDATE product SET attrs = jsonb_set(attrs, '{ram_gb}', '32') WHERE name = 'Laptop';
+```
 
-**Q: How does Postgres do full-text search?**
-`to_tsvector` turns text into a normalized, stemmed document; `to_tsquery` parses search terms; `@@` matches them; a GIN index makes it fast. It supports stemming, ranking, and phrase search — far better than `LIKE '%x%'`, and enough to avoid a separate search engine for many apps.
+**Q: `JSONB` vs a separate document database like MongoDB — when would you pick
+one over the other?**
+`JSONB` gives you document-style flexibility for the specific columns that need it,
+while keeping everything else about a relational database: full ACID transactions,
+real joins to your other properly-typed tables, and a single system to operate,
+back up, and monitor. A dedicated document database wins once the *entire* data
+model is naturally document-shaped, or once you need horizontal sharding/scale
+characteristics a single Postgres instance genuinely can't provide, or specialized
+document-store query patterns that `JSONB` doesn't support as richly (Phase 9 goes
+into MongoDB's aggregation pipeline and indexing model in depth). In practice, many
+teams start with Postgres and `JSONB` for the flexible parts of their schema and
+only introduce a second, separate document database once they've hit a concrete
+limitation — not preemptively.
 
-**Q: What is Row-Level Security and why does it matter?** ⭐
-RLS lets you attach policies that restrict which rows each role can see/modify, enforced by the database. It's key for multi-tenant apps — the DB filters every query to the current tenant, so even a buggy query can't leak another tenant's data. Defense in depth beyond app-level checks.
+**Q: How does full-text search work in Postgres, and why is it better than `LIKE
+'%word%'`?**
+`to_tsvector('english', text)` normalizes and stems a body of text into a
+searchable "document" representation (so "running," "runs," and "ran" all reduce to
+a common stem). `to_tsquery('english', terms)` does the same normalization to the
+search terms. The `@@` operator matches the two. Indexed with GIN on the
+`to_tsvector(...)` expression, this supports real search features — stemming,
+relevance ranking, phrase search — that a `LIKE '%word%'` predicate has none of;
+`LIKE` with a leading wildcard also can't use a normal B-tree index at all (Phase 4)
+and forces a full scan, whereas GIN-indexed full-text search stays fast at scale.
+For many applications this built-in capability is enough to avoid standing up a
+separate search engine like Elasticsearch entirely.
 
-**Q: How do you secure a Postgres database?**
-Connect apps as least-privilege roles (never superuser), GRANT only needed privileges, use RLS for row/tenant isolation, keep credentials in environment/secrets managers, use parameterized queries against injection, and restrict network access (pg_hba, TLS). Layered defenses.
+**Q: What is Row-Level Security, and why does it matter for a multi-tenant
+application?** ⭐
+Row-Level Security (RLS) lets you attach policies to a table that restrict *which
+rows* a given role can see or modify — filtering below the level of individual
+tables, which is all `GRANT`/`REVOKE` alone can control. Once enabled with `ALTER
+TABLE ... ENABLE ROW LEVEL SECURITY` and a policy like `USING (owner =
+current_setting('app.current_user', true))`, an ordinary `SELECT * FROM document`
+with no `WHERE` clause at all still only returns the current tenant's rows — the
+database itself applies the filter transparently. This matters enormously for
+multi-tenant systems because the alternative — every single query in the
+application remembering to add `WHERE tenant_id = ?` correctly, forever, across
+every endpoint anyone ever writes — is exactly the kind of thing that eventually
+gets missed once, and when it does, it's a cross-tenant data leak. RLS moves that
+guarantee from "every engineer must remember" to "the database structurally
+enforces it," which is a fundamentally stronger security posture.
+
+**Q: How do you secure a Postgres database in production, end to end?**
+Several layers, applied together (defense in depth): connect applications through a
+least-privilege role, never as a superuser, and `GRANT` only the specific
+privileges that role genuinely needs (`ALTER DEFAULT PRIVILEGES` so new tables
+inherit the right grants automatically); use Row-Level Security for per-tenant row
+isolation where multi-tenancy is in play; keep credentials in environment
+variables or a secrets manager, never committed in source code; use parameterized
+queries (prepared statements) in application code to prevent SQL injection (Phase
+1's DML material is the query-construction half of this defense); and restrict
+network-level access (`pg_hba.conf` rules, TLS for connections, firewalling the
+database port from the public internet). No single layer is sufficient on its own —
+a least-privilege role limits blast radius even if RLS or application-level
+filtering is somehow bypassed, and RLS protects data even if a query built with
+string concatenation somehow slips through.
